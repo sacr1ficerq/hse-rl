@@ -31,7 +31,7 @@ def evaluate_agent(env, agent, num_episodes=1000):
     lose_count = 0
     draw_count = 0
 
-    for _ in range(num_episodes):
+    for episode in range(num_episodes):
         state, _ = env.reset()
         done = False
 
@@ -47,6 +47,8 @@ def evaluate_agent(env, agent, num_episodes=1000):
             lose_count += 1
         elif reward == 0:
             draw_count += 1
+        if episode % 100 == 99:
+            print(f"Episode {episode}: Win {win_count}, Draw {draw_count}, Lose {lose_count}")
 
     return {
         "win": win_count / num_episodes,
