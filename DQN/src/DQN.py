@@ -3,17 +3,11 @@ import torch.nn as nn
 
 import numpy as np
 
+from .utils import conv2d_size_out
 
-def conv2d_size_out(size: int, kernel_size: int, stride: int) -> int:
-    """
-    common use case:
-    cur_layer_img_w = conv2d_size_out(cur_layer_img_w, kernel_size, stride)
-    cur_layer_img_h = conv2d_size_out(cur_layer_img_h, kernel_size, stride)
-    to understand the shape for dense layer's input
-    """
-    return (size - (kernel_size - 1) - 1) // stride + 1
 
-DEBUG = False
+DEBUG = 0
+
 
 class DuelingNetwork(nn.Module):
     """
@@ -63,11 +57,12 @@ class DuelingNetwork(nn.Module):
         features = self.convolution(x)  # (batch_size, 64, out_features)
         features = features.flatten(start_dim=1)  # (batch_size, out_features)
 
-        value = self.value_layer(features).squeeze(dim=1)  # (batch_size, 1)
+        value = self.value_layer(features)  # (batch_size)
         advantage = self.advantage_layer(features)
 
         advantage -= advantage.mean(dim=1, keepdim=True)  # ?
         if DEBUG: print(f"advantage shape: {advantage.shape}")
+        if DEBUG: print(f"value shape: {value.shape}")
 
         return advantage + value  # repeat value?
 
@@ -93,6 +88,7 @@ class GradScaler(nn.Module):
     """
     An nn.Module incapsulating GradScalerFunctional
     """
+
     def __init__(self, scale_factor: float):
         super().__init__()
         self.scale_factor = scale_factor
