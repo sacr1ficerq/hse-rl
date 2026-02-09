@@ -1,5 +1,6 @@
 import numpy as np
 
+
 class ReplayBuffer:
     def __init__(self, capacity):
         """
@@ -14,7 +15,7 @@ class ReplayBuffer:
               If you want to keep it simple, you can store a list of tuples of (s, a, r, s') in self._storage
               However you may find out there are faster and/or more memory-efficient ways to do so.
         """
-        #<YOUR CODE>
+        # <YOUR CODE>
         self._storage = []
         self._idx = 0  # where to put next element
         self._capacity = capacity
@@ -23,12 +24,12 @@ class ReplayBuffer:
         return len(self._storage)
 
     def add(self, obs_t, action, reward, obs_tp1, done):
-        '''
+        """
         Make sure, _storage will not exceed _maxsize.
         Make sure, FIFO rule is being followed: the oldest examples has to be removed earlier
-        '''
+        """
         data = (obs_t, action, reward, obs_tp1, done)
-        #<YOUR CODE>
+        # <YOUR CODE>
         # add data to storage
         if len(self._storage) == self._capacity:
             self._storage[self._idx] = data
@@ -71,11 +72,16 @@ class ReplayBuffer:
             dones.append(d)
 
         # <states>, <actions>, <rewards>, <next_states>, <is_done>
-        return np.array(states), np.array(actions), np.array(rewards), np.array(next_states), np.array(dones)
+        return (
+            np.array(states),
+            np.array(actions),
+            np.array(rewards),
+            np.array(next_states),
+            np.array(dones),
+        )
 
 
 if __name__ == "__main__":
-    import numpy as np
     exp_replay = ReplayBuffer(10)
 
     actions = np.random.randint(0, 3, size=30)
@@ -86,7 +92,11 @@ if __name__ == "__main__":
     for i in range(30):
         exp_replay.add(states[i], actions[i], rewards[i], new_states[i], done=False)
 
-    obs_batch, act_batch, reward_batch, next_obs_batch, is_done_batch = exp_replay.sample(5)
+    obs_batch, act_batch, reward_batch, next_obs_batch, is_done_batch = (
+        exp_replay.sample(5)
+    )
     print(obs_batch.shape)
 
-    assert len(exp_replay) == 10, "experience replay size should be 10 because that's what maximum capacity is"
+    assert (
+        len(exp_replay) == 10
+    ), "experience replay size should be 10 because that's what maximum capacity is"

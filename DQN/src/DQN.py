@@ -5,7 +5,6 @@ import numpy as np
 
 from .utils import conv2d_size_out
 
-
 DEBUG = 0
 
 
@@ -23,7 +22,7 @@ class DuelingNetwork(nn.Module):
 
         # <YOUR_CODE>
         self.convolution = nn.Sequential(
-            nn.Conv2d(in_channels= 4, out_channels=16, kernel_size=3, stride=2),
+            nn.Conv2d(in_channels=4, out_channels=16, kernel_size=3, stride=2),
             nn.ReLU(),
             nn.Conv2d(in_channels=16, out_channels=32, kernel_size=3, stride=2),
             nn.ReLU(),
@@ -40,13 +39,13 @@ class DuelingNetwork(nn.Module):
         self.value_layer = nn.Sequential(
             nn.Linear(out_features, hidden_size),  # hidden_size?
             nn.ReLU(),
-            nn.Linear(hidden_size, 1)  # hidden_size?
+            nn.Linear(hidden_size, 1),  # hidden_size?
         )
 
         self.advantage_layer = nn.Sequential(
             nn.Linear(out_features, hidden_size),  # hidden_size?
             nn.ReLU(),
-            nn.Linear(hidden_size, n_actions)  # hidden_size?
+            nn.Linear(hidden_size, n_actions),  # hidden_size?
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -61,8 +60,10 @@ class DuelingNetwork(nn.Module):
         advantage = self.advantage_layer(features)
 
         advantage -= advantage.mean(dim=1, keepdim=True)  # ?
-        if DEBUG: print(f"advantage shape: {advantage.shape}")
-        if DEBUG: print(f"value shape: {value.shape}")
+        if DEBUG:
+            print(f"advantage shape: {advantage.shape}")
+        if DEBUG:
+            print(f"value shape: {value.shape}")
 
         return advantage + value  # repeat value?
 
@@ -72,6 +73,7 @@ class GradScalerFunctional(torch.autograd.Function):
     A torch.autograd.Function works as Identity on forward pass
     and scales the gradient by scale_factor on backward pass.
     """
+
     @staticmethod
     def forward(ctx, input, scale_factor):
         ctx.scale_factor = scale_factor
@@ -98,7 +100,9 @@ class GradScaler(nn.Module):
 
 
 class DQNAgent(nn.Module):
-    def __init__(self, state_shape, n_actions, epsilon=0.0, hidden_size=32, device='cuda'):
+    def __init__(
+        self, state_shape, n_actions, epsilon=0.0, hidden_size=32, device="cuda"
+    ):
         super().__init__()
         self.device = device
         self.epsilon = epsilon
@@ -128,13 +132,17 @@ class DQNAgent(nn.Module):
         like forward, but works on numpy arrays, not tensors
         """
         tensor = torch.from_numpy(states).to(self.device)
-        if DEBUG: print(f"Tensor shape: {tensor.shape}")
+        if DEBUG:
+            print(f"Tensor shape: {tensor.shape}")
         with torch.no_grad():
             q_values = self.network(tensor)
-        if DEBUG: print(f"q_values shape: {q_values.shape}")
+        if DEBUG:
+            print(f"q_values shape: {q_values.shape}")
         return q_values.detach().cpu().numpy()
 
-    def sample_actions_by_qvalues(self, qvalues: np.ndarray, greedy: bool = False) -> np.ndarray:
+    def sample_actions_by_qvalues(
+        self, qvalues: np.ndarray, greedy: bool = False
+    ) -> np.ndarray:
         """pick actions given qvalues based on epsilon-greedy exploration strategy."""
         batch_size, n_actions = qvalues.shape
         eps = self.epsilon
@@ -152,18 +160,23 @@ class DQNAgent(nn.Module):
             states = np.array(states)
         qvalues = self.get_qvalues(states)
 
-        if DEBUG: print(f"Q-values shape: {qvalues.shape}")
+        if DEBUG:
+            print(f"Q-values shape: {qvalues.shape}")
 
         return self.sample_actions_by_qvalues(qvalues, greedy)
 
 
-if __name__ == '__main__':
-    device = torch.device('cuda:0')
+if __name__ == "__main__":
+    device = torch.device("cuda:0")
     module = DuelingNetwork(n_actions=4, width=16, height=16, hidden_size=32).to(device)
-    if DEBUG: print(module)
+    if DEBUG:
+        print(module)
 
-    x = torch.randn(size=(1, 4, 16, 16), device=device)  # (batch_size, C, width, height))
-    if DEBUG: print(module(x))
+    x = torch.randn(
+        size=(1, 4, 16, 16), device=device
+    )  # (batch_size, C, width, height))
+    if DEBUG:
+        print(module(x))
 
     n_actions = 5
     state_shape = (4, 16, 16)
