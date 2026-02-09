@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 
 import numpy as np
+from typing import Any, Tuple
 
 from .utils import conv2d_size_out
 
@@ -13,7 +14,7 @@ class DuelingNetwork(nn.Module):
     Implement the Dueling DQN logic.
     """
 
-    def __init__(self, n_actions, width, height, hidden_size) -> None:
+    def __init__(self, n_actions: int, width: int, height: int, hidden_size: int) -> None:
         super().__init__()
         self.n_actions = n_actions
         self.width = width
@@ -75,15 +76,15 @@ class GradScalerFunctional(torch.autograd.Function):
     """
 
     @staticmethod
-    def forward(ctx, input, scale_factor):
+    def forward(ctx: Any, input: torch.Tensor, scale_factor: float) -> torch.Tensor:
         ctx.scale_factor = scale_factor
         return input
 
     @staticmethod
-    def backward(ctx, grad_output):
+    def backward(ctx: Any, grad_output: torch.Tensor) -> Tuple[torch.Tensor, None]:
         scale_factor = ctx.scale_factor
         grad_input = grad_output * scale_factor
-        return grad_input, None
+        return grad_input, None  # why None?
 
 
 class GradScaler(nn.Module):
@@ -101,7 +102,12 @@ class GradScaler(nn.Module):
 
 class DQNAgent(nn.Module):
     def __init__(
-        self, state_shape, n_actions, epsilon=0.0, hidden_size=32, device="cuda"
+        self,
+        state_shape: Tuple[int, int, int],
+        n_actions: int,
+        epsilon: float = 0.0,
+        hidden_size: int = 32,
+        device: torch.device = torch.device("cuda:0"),
     ):
         super().__init__()
         self.device = device
@@ -117,7 +123,7 @@ class DQNAgent(nn.Module):
 
         self.network = DuelingNetwork(n_actions, width, height, hidden_size).to(device)
 
-    def forward(self, state_t):
+    def forward(self, state_t: torch.Tensor) -> torch.Tensor:
         """
         takes agent's observation (tensor), returns qvalues (tensor)
         :param state_t: a batch of 4-frame buffers, shape = [batch_size, 4, h, w]
@@ -127,10 +133,13 @@ class DQNAgent(nn.Module):
         return q_values
 
     @torch.inference_mode()
-    def get_qvalues(self, states: np.ndarray) -> np.ndarray:
+    def get_qvalues(self, states: np.ndarray | list) -> np.ndarray:
         """
         like forward, but works on numpy arrays, not tensors
         """
+        if isinstance(states, list):
+            states = np.array(states)
+
         tensor = torch.from_numpy(states).to(self.device)
         if DEBUG:
             print(f"Tensor shape: {tensor.shape}")

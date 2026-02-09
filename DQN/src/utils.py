@@ -1,7 +1,7 @@
 import torch
 
 device = torch.device("cuda:0")
-DEBUG = 1
+DEBUG = 0
 
 
 def conv2d_size_out(size: int, kernel_size: int, stride: int) -> int:
