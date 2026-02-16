@@ -180,24 +180,13 @@ def compute_quantile_loss(
     target_agent,
     gamma=0.99,
     device=device,
-):
-    """Compute quantile loss using torch operations only"""
-    states = torch.tensor(
-        states, device=device, dtype=torch.float
-    )  # shape: [batch_size, *state_shape]
+) -> torch.Tensor:
+    """
+    Compute quantile losses using torch operations only
 
-    # for some torch reason should not make actions a tensor
-    actions = torch.tensor(
-        actions, device=device, dtype=torch.long
-    )  # shape: [batch_size]
-    rewards = torch.tensor(
-        rewards, device=device, dtype=torch.float
-    )  # shape: [batch_size]
-    # shape: [batch_size, *state_shape]
-    next_states = torch.tensor(next_states, device=device, dtype=torch.float)
-    is_done = torch.tensor(
-        is_done.astype("float32"), device=device, dtype=torch.float
-    )  # shape: [batch_size]
+    :returns: losses of shape [batch_size]
+    """
+    is_done = is_done.type(torch.float)
     is_not_done = 1 - is_done
 
     # get q-values for all actions in current states
@@ -267,4 +256,4 @@ def compute_quantile_loss(
     loss = diff * (tau_weight - (diff < 0).float())  # shape: [batch_size, n_bins, n_bins]
     loss = loss.mean(dim=1).mean(dim=1)  # shape: [batch_size]
 
-    return loss.mean()
+    return loss

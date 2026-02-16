@@ -67,7 +67,7 @@ class QuantileDuelingNetwork(nn.Module):
         features = features.flatten(start_dim=1)  # (batch_size, out_features)
 
         # add scaling
-        features = self.grad_scaler(features)
+        # features = self.grad_scaler(features)
 
         value = self.value_layer(features).unsqueeze(-1)  # (batch_size, n_bins, 1)
         advantage = self.advantage_layer(features)  # (batch_size, n_actions * n_bins)

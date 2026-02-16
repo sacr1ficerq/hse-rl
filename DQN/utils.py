@@ -81,7 +81,7 @@ def linear_decay(init_val, final_val, cur_step, total_steps):
             final_val * cur_step) / total_steps
 
 
-def smoothen(values):
+def smoothen(values, steps=100, std=100):
     kernel = gaussian(100, std=100)
     # kernel = np.concatenate([np.arange(100), np.arange(99, -1, -1)])
     kernel = kernel / np.sum(kernel)
