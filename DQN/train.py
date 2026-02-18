@@ -8,42 +8,46 @@ from IPython.display import clear_output
 
 from utils_extra import make_env, play_and_record, evaluate, plot_stats, check_ram
 
-from typing import Tuple
+from typing import Tuple, Any
 
 import utils
+from src.QRDQN import QuantileDQNAgent
+from src.replay_buffer import PrioritizedReplayBuffer, ReplayBuffer
 
 
 def train_step(
-    agent,
+    agent: QuantileDQNAgent,
     target_network,
     optimizer,
     max_grad_norm,
     loss_fn,
     env,
-    state,
-    batch_size,
-    replay_buffer,
+    state: np.ndarray,
+    batch_size: int,
+    replay_buffer: ReplayBuffer | PrioritizedReplayBuffer,
     play_n_steps=1,
-) -> Tuple[float, float]:
+) -> Tuple[Any, float, float]:
 
     # play
-    s = state
     sum_rewards = 0
 
     # Play the game for n_steps as per instructions above
     # TODO: can we make this faster? agent doesnt evolve here
     for _ in range(play_n_steps):
-        action = agent.sample_actions([s])[0]
+        action = agent.sample_actions([state])[0]
         next_s, r, terminated, truncated, _ = env.step(action)
-        replay_buffer.add(s, action, r, next_s, terminated)  # add with maximum reward, then update after sampling anyways?
+        replay_buffer.add(state, action, r, next_s, terminated)  # add with maximum reward, then update after sampling anyways?
         sum_rewards += r
-        s = next_s
+        state = next_s
         if terminated or truncated:
-            s, _ = env.reset()
+            state, _ = env.reset()
 
     # train
     device = agent.device
-    batch, indices, weights = replay_buffer.sample(batch_size, device)
+    if isinstance(replay_buffer, PrioritizedReplayBuffer):
+        batch, indices, weights = replay_buffer.sample(batch_size, device)
+    else:
+        batch = replay_buffer.sample(batch_size)
     batch = [torch.from_numpy(x).to(device, non_blocking=True) for x in batch]
     obs_batch, act_batch, reward_batch, next_obs_batch, is_done_batch = batch
 
@@ -58,33 +62,40 @@ def train_step(
         gamma=0.99
     )
 
-    loss = (losses * weights).mean()
+    if isinstance(replay_buffer, PrioritizedReplayBuffer):
+        loss = (losses * weights).mean()
+    else:
+        loss = losses.mean()
     optimizer.zero_grad(set_to_none=True)
     loss.backward()
     grad_norm = nn.utils.clip_grad_norm_(agent.parameters(), max_grad_norm)
     optimizer.step()
 
-    replay_buffer.update_errors(indices, losses.detach().cpu().numpy())
-    return loss.data.cpu().item(), grad_norm.cpu().item()
+    if isinstance(replay_buffer, PrioritizedReplayBuffer):
+        replay_buffer.update_errors(indices, losses.detach().cpu().numpy())
+
+    return state, loss.data.cpu().item(), grad_norm.cpu().item()
 
 
 def train(
-    agent,
+    agent: QuantileDQNAgent,
     target_network,
     optimizer,
     max_grad_norm,
     loss_fn,
     env,
-    total_steps,
-    batch_size,
-    replay_buffer,
-    loss_freq,
-    refresh_target_network_freq,
-    eval_freq,
-    decay_steps,
-    init_epsilon,
-    final_epsilon,
-    play_n_steps,
+    total_steps: int,
+    batch_size: int,
+    replay_buffer: ReplayBuffer | PrioritizedReplayBuffer,
+    # Logging
+    loss_freq: int,
+    refresh_target_network_freq: int,
+    eval_freq: int,
+    decay_steps: int,
+    # Exploration
+    init_epsilon: float,
+    final_epsilon: float,
+    play_n_steps: int,
 ):
     mean_rw_history = []
     td_loss_history = []
@@ -95,7 +106,7 @@ def train(
     # warmup
     for _ in range(batch_size):
         s = state
-        action = agent.sample_actions([s])[0]
+        action = agent.sample_actions(np.array([s]))[0]
         next_s, r, terminated, truncated, _ = env.step(action)
         replay_buffer.add(s, action, r, next_s, terminated)  # add with maximum reward, then update after sampling anyways?
         s = next_s
@@ -105,7 +116,8 @@ def train(
     for step in trange(total_steps + 1):
         check_ram()
         agent.epsilon = utils.linear_decay(init_epsilon, final_epsilon, step, decay_steps)
-        loss, grad_norm = train_step(
+
+        state, loss, grad_norm = train_step(
             agent,
             target_network,
             optimizer,
