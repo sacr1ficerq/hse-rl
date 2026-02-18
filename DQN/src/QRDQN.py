@@ -1,13 +1,61 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 import numpy as np
 from typing import Any, Tuple
 
+import sys
+
+# sys.path.append(".")
 from .utils import conv2d_size_out
 from .DQN import GradScaler, GradScalerFunctional
 
 DEBUG = 0
+
+
+class NoisyLinear(nn.Module):
+    def __init__(self, in_features: int, out_features: int, sigma_init: float = 0.5):
+        super().__init__()
+        self.in_features = in_features
+        self.out_features = out_features
+        self.sigma_init = sigma_init
+
+        self.weight_mu = nn.Parameter(torch.empty(out_features, in_features))
+        self.weight_sigma = nn.Parameter(torch.empty(out_features, in_features))
+        self.register_buffer("weight_epsilon", torch.empty(out_features, in_features))
+
+        self.bias_mu = nn.Parameter(torch.empty(out_features))
+        self.bias_sigma = nn.Parameter(torch.empty(out_features))
+        self.register_buffer("bias_epsilon", torch.empty(out_features))
+
+        self.reset_parameters()
+        self.reset_noise()
+
+    def reset_parameters(self):
+        mu_range = 1.0 / np.sqrt(self.in_features)
+        self.weight_mu.data.uniform_(-mu_range, mu_range)
+        self.weight_sigma.data.fill_(self.sigma_init / np.sqrt(self.in_features))
+        self.bias_mu.data.uniform_(-mu_range, mu_range)
+        self.bias_sigma.data.fill_(self.sigma_init / np.sqrt(self.out_features))
+
+    def _f(self, x: torch.Tensor) -> torch.Tensor:
+        return torch.sign(x) * torch.sqrt(torch.abs(x))
+
+    def reset_noise(self):
+        eps_in = self._f(torch.randn(self.in_features, device=self.weight_mu.device))
+        eps_out = self._f(torch.randn(self.out_features, device=self.weight_mu.device))
+        self.weight_epsilon.copy_(eps_out.unsqueeze(1) * eps_in)
+        self.bias_epsilon.copy_(eps_out)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if self.training:
+            weight = self.weight_mu + self.weight_sigma * self.weight_epsilon
+            bias = self.bias_mu + self.bias_sigma * self.bias_epsilon
+        else:
+            weight = self.weight_mu
+            bias = self.bias_mu
+        return F.linear(x, weight, bias)
 
 
 class QuantileDuelingNetwork(nn.Module):
@@ -46,18 +94,18 @@ class QuantileDuelingNetwork(nn.Module):
         out_features = width * height * 64
 
         self.value_layer = nn.Sequential(
-            nn.Linear(out_features, hidden_size),
+            NoisyLinear(out_features, hidden_size),
             nn.ReLU(),
-            nn.Linear(hidden_size, self.n_bins),
+            NoisyLinear(hidden_size, self.n_bins),
         )
 
         self.advantage_layer = nn.Sequential(
-            nn.Linear(out_features, hidden_size),
+            NoisyLinear(out_features, hidden_size),
             nn.ReLU(),
-            nn.Linear(hidden_size, n_actions * self.n_bins),
+            NoisyLinear(hidden_size, n_actions * self.n_bins),
         )
 
-        self.grad_scaler = GradScaler(1.0 / (2 ** 0.5))
+        self.grad_scaler = GradScaler(1.0 / (2**0.5))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         assert x.ndim == 4, x.shape  # (batch_size, n_images, width, height)
@@ -75,7 +123,9 @@ class QuantileDuelingNetwork(nn.Module):
         batch_size = advantage.size(0)
         advantage = advantage.view(batch_size, self.n_bins, self.n_actions)
 
-        advantage -= advantage.mean(dim=2, keepdim=True)  # (batch_size, n_bins, n_actions)
+        advantage -= advantage.mean(
+            dim=2, keepdim=True
+        )  # (batch_size, n_bins, n_actions)
         if DEBUG:
             print(f"advantage shape: {advantage.shape}")
             print(f"value shape: {value.shape}")
@@ -105,14 +155,26 @@ class QuantileDQNAgent(nn.Module):
         # Define your network body here. Please make sure agent is fully contained here
         # nn.Flatten() can be useful
 
-        self.network = QuantileDuelingNetwork(n_actions, width, height, hidden_size, n_bins).to(device)
+        self.network = QuantileDuelingNetwork(
+            n_actions, width, height, hidden_size, n_bins
+        ).to(device)
+
+    def reset_noise(self):
+        for module in self.network.value_layer:
+            if isinstance(module, NoisyLinear):
+                module.reset_noise()
+        for module in self.network.advantage_layer:
+            if isinstance(module, NoisyLinear):
+                module.reset_noise()
 
     def forward(self, state_t: torch.Tensor) -> torch.Tensor:
         """
         takes agent's observation (tensor), returns zvalues (tensor)
         :param state_t: a batch of 4-frame buffers, shape = [batch_size, 4, h, w]
         """
-        q_values = self.network(state_t.to(self.device))  # (batch_size, n_bins, n_actions)
+        q_values = self.network(
+            state_t.to(self.device)
+        )  # (batch_size, n_bins, n_actions)
         return q_values  # (batch_size, n_bins, n_actions)
 
     @torch.inference_mode()
@@ -169,7 +231,9 @@ if __name__ == "__main__":
     CHANNELS = 4
 
     device = torch.device("cuda:0")
-    module = QuantileDuelingNetwork(n_actions=N_ACTIONS, width=WIDTH, height=HEIGHT, hidden_size=32, n_bins=N_BINS).to(device)
+    module = QuantileDuelingNetwork(
+        n_actions=N_ACTIONS, width=WIDTH, height=HEIGHT, hidden_size=32, n_bins=N_BINS
+    ).to(device)
 
     if DEBUG:
         print(module)
@@ -185,7 +249,7 @@ if __name__ == "__main__":
     print("state_shape", state_shape)
     epsilon = 0.1
     hidden_size = 32
-    agent = QuantileDQNAgent(state_shape, N_ACTIONS, epsilon, hidden_size)
+    agent = QuantileDQNAgent(state_shape, N_ACTIONS, N_BINS, epsilon, hidden_size)
 
     npx = x.detach().cpu().numpy()
     q_values = agent.get_qvalues(npx)

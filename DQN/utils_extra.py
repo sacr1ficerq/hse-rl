@@ -141,8 +141,15 @@ def check_ram():
             pass
 
 
-def plot_stats(mean_rw_history, td_loss_history, initial_state_v_history, grad_norm_history):
-    plt.style.use('seaborn-v0_8-muted')  # or 'ggplot'
+def plot_stats(
+    mean_rw_history,
+    td_loss_history,
+    initial_state_v_history,
+    grad_norm_history,
+    noise_sigmas_history
+):
+    plt.style.use('seaborn-v0_8-muted')
+    # plt.style.use('ggplot')
 
     def ema(series, alpha=0.1):
         """
@@ -180,8 +187,14 @@ def plot_stats(mean_rw_history, td_loss_history, initial_state_v_history, grad_n
     plt.plot(ema(initial_state_v_history), color='tab:red', linewidth=2)
     plt.grid()
 
+    # plt.subplot(2, 2, 4)
+    # plt.title("Grad norm history (smoothened)")
+    # plt.plot(utils.smoothen(grad_norm_history), color='tab:blue')
+    # plt.grid()
+    # plt.show()
+
     plt.subplot(2, 2, 4)
-    plt.title("Grad norm history (smoothened)")
-    plt.plot(utils.smoothen(grad_norm_history), color='tab:blue')
+    plt.title("Noise sigmas history (smoothened)")
+    plt.plot(utils.smoothen(noise_sigmas_history), color='tab:blue')
     plt.grid()
     plt.show()

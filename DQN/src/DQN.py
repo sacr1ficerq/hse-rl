@@ -4,6 +4,8 @@ import torch.nn as nn
 import numpy as np
 from typing import Any, Tuple
 
+import sys
+# sys.path.append(".")
 from .utils import conv2d_size_out
 
 DEBUG = 0

@@ -11,7 +11,7 @@ from utils_extra import make_env, play_and_record, evaluate, plot_stats, check_r
 from typing import Tuple, Any
 
 import utils
-from src.QRDQN import QuantileDQNAgent
+from src.QRDQN import QuantileDQNAgent, NoisyLinear
 from src.replay_buffer import PrioritizedReplayBuffer, ReplayBuffer
 
 
@@ -26,7 +26,7 @@ def train_step(
     batch_size: int,
     replay_buffer: ReplayBuffer | PrioritizedReplayBuffer,
     play_n_steps=1,
-) -> Tuple[Any, float, float]:
+) -> Tuple[np.ndarray, float, float]:
 
     # play
     sum_rewards = 0
@@ -34,13 +34,14 @@ def train_step(
     # Play the game for n_steps as per instructions above
     # TODO: can we make this faster? agent doesnt evolve here
     for _ in range(play_n_steps):
-        action = agent.sample_actions([state])[0]
+        action = agent.sample_actions(np.array([state]))[0]
         next_s, r, terminated, truncated, _ = env.step(action)
         replay_buffer.add(state, action, r, next_s, terminated)  # add with maximum reward, then update after sampling anyways?
         sum_rewards += r
         state = next_s
         if terminated or truncated:
             state, _ = env.reset()
+            agent.reset_noise()
 
     # train
     device = agent.device
@@ -77,6 +78,14 @@ def train_step(
     return state, loss.data.cpu().item(), grad_norm.cpu().item()
 
 
+def get_mean_sigma(agent):
+    sigmas = []
+    for m in agent.modules():
+        if isinstance(m, NoisyLinear):
+            sigmas.append(m.weight_sigma.data.mean().item())
+    return float(np.mean(sigmas))
+
+
 def train(
     agent: QuantileDQNAgent,
     target_network,
@@ -101,6 +110,7 @@ def train(
     td_loss_history = []
     initial_state_v_history = []
     grad_norm_history = []
+    noise_sigmas_history = []
 
     state, _ = env.reset()
     # warmup
@@ -133,6 +143,7 @@ def train(
         if step % loss_freq == 0:
             td_loss_history.append(loss)
             grad_norm_history.append(grad_norm)
+            noise_sigmas_history.append(get_mean_sigma(agent))
 
         if step % refresh_target_network_freq == 0:
             target_network.load_state_dict(agent.state_dict())
@@ -154,7 +165,7 @@ def train(
             clear_output(True)
             print("buffer size = %i, epsilon = %.5f" % (len(replay_buffer), agent.epsilon))
 
-            plot_stats(mean_rw_history, td_loss_history, initial_state_v_history, grad_norm_history)
+            plot_stats(mean_rw_history, td_loss_history, initial_state_v_history, grad_norm_history, noise_sigmas_history)
 
 
 if __name__ == '__main__':
